@@ -48,12 +48,21 @@ with st.sidebar:
                                   index=0 if param['type']=='number' else 1,
                                   key=f"type_{i}")
         if ptype == 'number':
-            value = cols[2].number_input("值", value=float(param['value']),
-                                         step=param.get('step', 1.0),
-                                         key=f"val_{i}")
+            step_val = float(param.get('step', 1.0))
+            min_val = float(param.get('min')) if param.get('min') is not None else None
+            max_val = float(param.get('max')) if param.get('max') is not None else None
+            value = cols[2].number_input(
+                "值",
+                value=float(param['value']),
+                min_value=min_val,
+                max_value=max_val,
+                step=step_val,
+                key=f"val_{i}"
+            )
         else:
             options = param.get('options', ['选项1', '选项2'])
-            value = cols[2].selectbox("值", options, index=options.index(param.get('value', options[0])),
+            value = cols[2].selectbox("值", options, 
+                                      index=options.index(param.get('value', options[0])) if param.get('value') in options else 0,
                                       key=f"val_{i}")
         if cols[3].button("删除", key=f"del_{i}"):
             continue
@@ -62,7 +71,7 @@ with st.sidebar:
     st.session_state.custom_params = new_params
 
     if st.button("➕ 添加参数"):
-        st.session_state.custom_params.append({'name': 'param', 'type': 'number', 'value': 0})
+        st.session_state.custom_params.append({'name': 'param', 'type': 'number', 'value': 0.0})
         st.rerun()
 
     # 操作按钮
@@ -144,21 +153,17 @@ with tab3:
         st.info("至少需要两个数据点才能生成结论。")
     else:
         df = pd.DataFrame(st.session_state.history)
-        # 简单趋势分析
-        x = st.session_state.get('x_conclusion', 'distance')
+        x = st.selectbox("分析变量", ['distance', 'height', 'freq_ghz'], key='x_conclusion')
         y = 'Pr_dBm'
-        if x == 'env':
-            st.write("不同环境下的接收功率分布见图表。")
+        corr = df[x].corr(df[y])
+        if corr > 0.7:
+            st.success(f"{x} 与 {y} 呈**强正相关** (r={corr:.2f})，接收功率随{x}增加而上升。")
+        elif corr < -0.7:
+            st.error(f"{x} 与 {y} 呈**强负相关** (r={corr:.2f})，接收功率随{x}增加而下降。")
+        elif corr > 0.3:
+            st.info(f"{x} 与 {y} 呈**弱正相关**。")
+        elif corr < -0.3:
+            st.info(f"{x} 与 {y} 呈**弱负相关**。")
         else:
-            corr = df[x].corr(df[y])
-            if corr > 0.7:
-                st.success(f"{x} 与 {y} 呈**强正相关** (r={corr:.2f})，接收功率随{x}增加而上升。")
-            elif corr < -0.7:
-                st.error(f"{x} 与 {y} 呈**强负相关** (r={corr:.2f})，接收功率随{x}增加而下降。")
-            elif corr > 0.3:
-                st.info(f"{x} 与 {y} 呈**弱正相关**。")
-            elif corr < -0.3:
-                st.info(f"{x} 与 {y} 呈**弱负相关**。")
-            else:
-                st.warning(f"{x} 与 {y} 无明显线性关系。")
-            st.caption("建议保持其他参数固定（控制变量）再运行多次以观察清晰趋势。")
+            st.warning(f"{x} 与 {y} 无明显线性关系。")
+        st.caption("建议保持其他参数固定（控制变量）再运行多次以观察清晰趋势。")
