@@ -4,14 +4,12 @@ import plotly.express as px
 import numpy as np
 from copy import deepcopy
 
-# 尝试导入statsmodels用于趋势线
 try:
     import statsmodels.api as sm
     HAS_SM = True
 except ImportError:
     HAS_SM = False
 
-# 自定义模块（需确保 models.py 和 utils.py 在同一目录）
 from models import compute_pathloss
 from utils import MODEL_LABELS, ENV_LABELS, DEFAULT_PARAMS
 
@@ -27,7 +25,7 @@ if 'custom_params' not in st.session_state:
 if 'model' not in st.session_state:
     st.session_state.model = 'probabilistic'
 
-# 侧边栏 - 参数输入
+# ---------- 侧边栏：物理参数、模型选择、操作按钮 ----------
 with st.sidebar:
     st.header("□ 物理参数")
     height = st.slider("无人机高度 (m)", 20, 500, 120, 1)
@@ -45,58 +43,16 @@ with st.sidebar:
         st.session_state.custom_params = deepcopy(DEFAULT_PARAMS.get(model, []))
         st.rerun()
 
-    # 自定义参数编辑
-    st.header("▯ 自定义参数")
-    new_params = []
-    for i, param in enumerate(st.session_state.custom_params):
-        cols = st.columns([3, 1, 3, 1])
-        with cols[0]:
-            name = st.text_input("名称", param['name'], key=f"name_{i}", label_visibility="collapsed")
-        with cols[1]:
-            ptype = st.selectbox("类型", ['number', 'select'],
-                                 index=0 if param['type'] == 'number' else 1,
-                                 key=f"type_{i}", label_visibility="collapsed")
-        with cols[2]:
-            if ptype == 'number':
-                step_val = float(param.get('step', 1.0))
-                min_val = float(param.get('min')) if param.get('min') is not None else None
-                max_val = float(param.get('max')) if param.get('max') is not None else None
-                value = st.number_input("值", value=float(param['value']),
-                                        min_value=min_val, max_value=max_val,
-                                        step=step_val, key=f"val_{i}",
-                                        label_visibility="collapsed")
-            else:
-                options = param.get('options', ['选项1', '选项2'])
-                # 确保默认值在选项中
-                def_idx = options.index(param.get('value', options[0])) if param.get('value') in options else 0
-                value = st.selectbox("值", options, index=def_idx,
-                                     key=f"val_{i}", label_visibility="collapsed")
-        with cols[3]:
-            if st.button("×", key=f"del_{i}", help="删除此参数"):
-                continue  # 实际删除在循环外处理
-        new_params.append({**param, 'name': name, 'type': ptype, 'value': value,
-                           'options': options if ptype == 'select' else None})
-
-    # 删除逻辑：重新构建参数列表，忽略标记为删除的
-    st.session_state.custom_params = new_params
-
-    if st.button("+ 添加参数"):
-        st.session_state.custom_params.append({'name': 'param', 'type': 'number', 'value': 0.0})
-        st.rerun()
-
     # 操作按钮
     col1, col2 = st.columns(2)
     with col1:
         if st.button("▸ 运行仿真", use_container_width=True):
-            # 收集当前自定义参数值
             custom_vals = {p['name']: p['value'] for p in st.session_state.custom_params}
             try:
                 pl = compute_pathloss(st.session_state.model, height, distance, env, freq_ghz, custom_vals)
             except Exception as e:
                 st.error(f"计算错误: {e}")
                 st.stop()
-
-            # 接收功率计算
             Pt = custom_vals.get('Pt', 30)
             Gt = custom_vals.get('Gt', 3)
             Gr = custom_vals.get('Gr', 3)
@@ -106,7 +62,6 @@ with st.sidebar:
             noise = -174 + 10 * np.log10(B_MHz * 1e6) + NF
             SNR = Pr - noise
             cap = B_MHz * 1e6 * np.log2(1 + 10 ** (SNR / 10)) / 1e6
-
             entry = {
                 'id': len(st.session_state.history) + 1,
                 'height': height, 'distance': distance, 'env': env,
@@ -117,19 +72,17 @@ with st.sidebar:
             }
             st.session_state.history.append(entry)
             st.success("仿真完成！")
-
     with col2:
         if st.button("× 清空历史", use_container_width=True):
             st.session_state.history = []
             st.rerun()
 
-# 主区域
+# ---------- 主页面：图表、历史、结论 ----------
 tab1, tab2, tab3 = st.tabs(["= 历史记录", "▲ 图表分析", "◉ 结论"])
 
 with tab1:
     if st.session_state.history:
         df = pd.DataFrame(st.session_state.history)
-        # 展开自定义参数列
         all_custom_keys = set()
         for h in st.session_state.history:
             all_custom_keys.update(h['custom_params'].keys())
@@ -190,3 +143,45 @@ with tab3:
         else:
             st.write(f"{x} 为非数值列，无法计算相关性。")
         st.caption("建议保持其他参数固定（控制变量）再运行多次以观察清晰趋势。")
+
+# ---------- 页面底部：自定义参数设置 ----------
+st.divider()
+st.header("▯ 自定义参数设置")
+st.caption("此处可修改当前信道模型的相关参数，更改后点击侧边栏“运行仿真”即可生效。")
+
+new_params = []
+# 每行显示4个元素：名称、类型、值、删除按钮
+cols_ratio = [3, 1, 3, 1]
+for i, param in enumerate(st.session_state.custom_params):
+    cols = st.columns(cols_ratio)
+    with cols[0]:
+        name = st.text_input("名称", param['name'], key=f"name_bottom_{i}", label_visibility="collapsed")
+    with cols[1]:
+        ptype = st.selectbox("类型", ['number', 'select'],
+                              index=0 if param['type'] == 'number' else 1,
+                              key=f"type_bottom_{i}", label_visibility="collapsed")
+    with cols[2]:
+        if ptype == 'number':
+            step_val = float(param.get('step', 1.0))
+            min_val = float(param.get('min')) if param.get('min') is not None else None
+            max_val = float(param.get('max')) if param.get('max') is not None else None
+            value = st.number_input("值", value=float(param['value']),
+                                    min_value=min_val, max_value=max_val,
+                                    step=step_val, key=f"val_bottom_{i}",
+                                    label_visibility="collapsed")
+        else:
+            options = param.get('options', ['选项1', '选项2'])
+            def_idx = options.index(param.get('value', options[0])) if param.get('value') in options else 0
+            value = st.selectbox("值", options, index=def_idx,
+                                 key=f"val_bottom_{i}", label_visibility="collapsed")
+    with cols[3]:
+        if st.button("×", key=f"del_bottom_{i}", help="删除此参数"):
+            continue  # 逻辑同上，外部剔除
+    new_params.append({**param, 'name': name, 'type': ptype, 'value': value,
+                       'options': options if ptype == 'select' else None})
+
+st.session_state.custom_params = new_params
+
+if st.button("+ 添加参数"):
+    st.session_state.custom_params.append({'name': 'param', 'type': 'number', 'value': 0.0})
+    st.rerun()
