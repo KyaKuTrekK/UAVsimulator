@@ -98,25 +98,37 @@ with tab2:
     if not st.session_state.history:
         st.info("请先运行仿真并积累数据。")
     else:
+        # 中文标签映射
+        x_label_map = {
+            'distance': '距离(m)',
+            'height': '高度(m)',
+            'freq_ghz': '载频(GHz)',
+            'env': '环境'
+        }
+        y_label_map = {
+            'Pr_dBm': '接收功率(dBm)',
+            'capacity_mbps': '信道容量(Mbps)'
+        }
+        x_axis = st.selectbox("X轴", list(x_label_map.keys()),
+                              format_func=lambda x: x_label_map[x])
+        y_axis = st.selectbox("Y轴", list(y_label_map.keys()),
+                              format_func=lambda x: y_label_map[y])
+
         df = pd.DataFrame(st.session_state.history)
-        x_axis = st.selectbox("X轴", ['distance', 'height', 'freq_ghz', 'env'],
-                              format_func=lambda x: {'distance': '距离(m)', 'height': '高度(m)',
-                                                     'freq_ghz': '载频(GHz)', 'env': '环境'}[x])
-        y_axis = st.selectbox("Y轴", ['Pr_dBm', 'capacity_mbps'],
-                              format_func=lambda x: {'Pr_dBm': '接收功率(dBm)', 'capacity_mbps': '信道容量(Mbps)'}[x])
+
         try:
             if x_axis == 'env':
                 fig = px.box(df, x='env', y=y_axis, color='env',
-                             labels={'env': '环境', y_axis: y_axis})
+                             labels={'env': x_label_map['env'], y_axis: y_label_map[y_axis]})
             else:
                 if HAS_SM:
                     fig = px.scatter(df, x=x_axis, y=y_axis, trendline="ols",
-                                     labels={x_axis: x_axis, y_axis: y_axis},
-                                     title=f"{x_axis} 对 {y_axis} 的影响")
+                                     labels={x_axis: x_label_map[x_axis], y_axis: y_label_map[y_axis]},
+                                     title=f"{x_label_map[x_axis]} 对 {y_label_map[y_axis]} 的影响")
                 else:
                     fig = px.scatter(df, x=x_axis, y=y_axis,
-                                     labels={x_axis: x_axis, y_axis: y_axis},
-                                     title=f"{x_axis} 对 {y_axis} 的影响 (趋势线需安装statsmodels)")
+                                     labels={x_axis: x_label_map[x_axis], y_axis: y_label_map[y_axis]},
+                                     title=f"{x_label_map[x_axis]} 对 {y_label_map[y_axis]} 的影响")
             st.plotly_chart(fig, use_container_width=True)
         except Exception as e:
             st.error(f"绘图错误: {e}")
@@ -126,22 +138,29 @@ with tab3:
         st.info("至少需要两个数据点才能生成结论。")
     else:
         df = pd.DataFrame(st.session_state.history)
-        x = st.selectbox("分析变量", ['distance', 'height', 'freq_ghz'], key='x_conclusion')
+        x_label_map = {
+            'distance': '距离(m)',
+            'height': '高度(m)',
+            'freq_ghz': '载频(GHz)'
+        }
+        x = st.selectbox("分析变量", list(x_label_map.keys()), key='x_conclusion',
+                         format_func=lambda x: x_label_map[x])
         y = 'Pr_dBm'
+        y_name = '接收功率'
         if pd.api.types.is_numeric_dtype(df[x]):
             corr = df[x].corr(df[y])
             if corr > 0.7:
-                st.success(f"{x} 与 {y} 呈**强正相关** (r={corr:.2f})，接收功率随{x}增加而上升。")
+                st.success(f"{x_label_map[x]} 与 {y_name} 呈**强正相关** (r={corr:.2f})，{y_name}随{x_label_map[x]}增加而上升。")
             elif corr < -0.7:
-                st.error(f"{x} 与 {y} 呈**强负相关** (r={corr:.2f})，接收功率随{x}增加而下降。")
+                st.error(f"{x_label_map[x]} 与 {y_name} 呈**强负相关** (r={corr:.2f})，{y_name}随{x_label_map[x]}增加而下降。")
             elif corr > 0.3:
-                st.info(f"{x} 与 {y} 呈**弱正相关**。")
+                st.info(f"{x_label_map[x]} 与 {y_name} 呈**弱正相关**。")
             elif corr < -0.3:
-                st.info(f"{x} 与 {y} 呈**弱负相关**。")
+                st.info(f"{x_label_map[x]} 与 {y_name} 呈**弱负相关**。")
             else:
-                st.warning(f"{x} 与 {y} 无明显线性关系。")
+                st.warning(f"{x_label_map[x]} 与 {y_name} 无明显线性关系。")
         else:
-            st.write(f"{x} 为非数值列，无法计算相关性。")
+            st.write(f"{x_label_map[x]} 为非数值列，无法计算相关性。")
         st.caption("建议保持其他参数固定（控制变量）再运行多次以观察清晰趋势。")
 
 # ---------- 页面底部：自定义参数设置 ----------
@@ -150,7 +169,6 @@ st.header("▯ 自定义参数设置")
 st.caption("此处可修改当前信道模型的相关参数，更改后点击侧边栏“运行仿真”即可生效。")
 
 new_params = []
-# 每行显示4个元素：名称、类型、值、删除按钮
 cols_ratio = [3, 1, 3, 1]
 for i, param in enumerate(st.session_state.custom_params):
     cols = st.columns(cols_ratio)
@@ -176,7 +194,7 @@ for i, param in enumerate(st.session_state.custom_params):
                                  key=f"val_bottom_{i}", label_visibility="collapsed")
     with cols[3]:
         if st.button("×", key=f"del_bottom_{i}", help="删除此参数"):
-            continue  # 逻辑同上，外部剔除
+            continue
     new_params.append({**param, 'name': name, 'type': ptype, 'value': value,
                        'options': options if ptype == 'select' else None})
 
