@@ -98,7 +98,7 @@ with tab2:
     if not st.session_state.history:
         st.info("请先运行仿真并积累数据。")
     else:
-        # 中文标签映射
+        # 提前定义标签映射
         x_label_map = {
             'distance': '距离(m)',
             'height': '高度(m)',
@@ -109,10 +109,11 @@ with tab2:
             'Pr_dBm': '接收功率(dBm)',
             'capacity_mbps': '信道容量(Mbps)'
         }
+
         x_axis = st.selectbox("X轴", list(x_label_map.keys()),
                               format_func=lambda x: x_label_map[x])
         y_axis = st.selectbox("Y轴", list(y_label_map.keys()),
-                              format_func=lambda x: y_label_map[y])
+                              format_func=lambda x: y_label_map[x])
 
         df = pd.DataFrame(st.session_state.history)
 
